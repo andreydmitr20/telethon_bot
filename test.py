@@ -21,9 +21,21 @@ async def run():
             return
 
         @client.on(events.NewMessage)
-        async def my_event_handler(event):
-            """my_event_handler"""
+        async def message_handler(event):
+            """message_handler"""
             print(f"{event}")
+
+        @client.on(events.ChatAction)
+        async def chat_handler(event):
+            """chat_handler"""
+            if (
+                event.user_joined
+                or event.user_added
+                or event.user_left
+                or event.user_kicked
+            ):
+                # await event.reply('Welcome to the group!')
+                print(f"{event}")
 
         await client.run_until_disconnected()
 

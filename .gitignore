@@ -13,3 +13,4 @@ tempCodeRunnerFile.py
 /build
 /dist
 /my_python
+*.session
