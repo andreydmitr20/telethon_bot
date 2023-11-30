@@ -26,5 +26,8 @@ class config:
     """common config constants"""
 
     filename = CONFIG_FILENAME
+
+    bot_token: str = os.getenv("bot_token")
+    phone: str = os.getenv("phone")
     api_id: str = os.getenv("api_id")
     api_hash: str = os.getenv("api_hash")
