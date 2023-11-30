@@ -2,6 +2,12 @@ import asyncio
 from telethon import TelegramClient, events
 from config import config
 
+# @bot.on(events.NewMessage(pattern="/start"))
+# async def start(event):
+#     """Send a message when the command /start is issued."""
+#     await event.respond("Hi!")
+#     raise events.StopPropagation
+
 
 async def run():
     print("start")
