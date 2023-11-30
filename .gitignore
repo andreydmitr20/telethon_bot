@@ -1,0 +1,15 @@
+venv
+__pycache__
+.vscode
+.env
+/data
+*.mp3
+*.mp4
+tempCodeRunnerFile.py
+.pass
+/docs
+.keys.json
+*.__pycache__
+/build
+/dist
+/my_python
