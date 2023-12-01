@@ -44,11 +44,14 @@ class TelethonBot:
         while True:
             # delete who did not pass the quiz
             utc_now = current_utc_date_int()
-            for user_id, item in self.__user_joined_or_added_dict.items():
-                if item["end_utc_time"] >= utc_now:
-                    await self.quiz_clear(user_id, kick_user=True)
-
-            await asyncio.sleep(1)
+            try:
+                for user_id, item in self.__user_joined_or_added_dict.items():
+                    if item["end_utc_time"] <= utc_now:
+                        await self.quiz_clear(user_id, kick_user=True)
+                        break
+            except:
+                pass
+            await asyncio.sleep(0.1)
 
     async def quiz_clear(self, user_id: int, kick_user: bool = False):
         """quiz_clear"""
@@ -82,19 +85,18 @@ class TelethonBot:
     async def process_new_message(self, event):
         """process_new_message"""
         log.info("%s %s", self.__log_pid, event)
-        
-        
+
         user_id = event.message.from_id.user_id
-        
+
         # check if quiz answer
         item = self.__user_joined_or_added_dict.get(user_id, None)
         if item:
             try:
                 # check quiz item
-                kick_user= item["quiz_answer"] != event.message.message.strip().lower():
+                kick_user = item["quiz_answer"] != event.message.message.strip().lower()
                 # quiz has done
-                await self.quiz_clear(user_id,kick_user=kick_user)
-            
+                await self.quiz_clear(user_id, kick_user=kick_user)
+
             except Exception as exception:
                 log.error(
                     "%s %s exception %s",
@@ -103,7 +105,7 @@ class TelethonBot:
                     exception,
                 )
             finally:
-                event.message.delete()
+                await event.message.delete()
 
     async def process_chat_action(self, event):
         """process_chat_action"""
@@ -132,7 +134,9 @@ class TelethonBot:
 
     async def process_user_left_or_kicked(self, event):
         """process_user_left_or_kicked"""
-        pass
+        log.info("%s %s", self.__log_pid, event)
+        if event.action_message:
+            await event.action_message.delete()
 
     async def kick_user_from_group(self, group_id: int, user_id: int):
         """kick_user_from_group"""
