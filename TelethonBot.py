@@ -48,13 +48,21 @@ class TelethonBot:
             # delete who did not pass the quiz
             utc_now = current_utc_date_int()
             try:
-                for user_id, item in self.__user_joined_or_added_dict.items():
-                    if item["end_utc_time"] <= utc_now:
-                        await self.quiz_clear(user_id, kick_user=True)
-                        break
+                quiz_tasks_checked = False
+                while not quiz_tasks_checked:
+                    quiz_tasks_checked = True
+                    for user_id, item in self.__user_joined_or_added_dict.items():
+                        quiz_is_done = item["quiz_is_done"]
+                        if quiz_is_done or item["end_utc_time"] <= utc_now:
+                            await self.quiz_clear(user_id, kick_user=not quiz_is_done)
+                            quiz_tasks_checked = False
+                            break
+                    await asyncio.sleep(0.1)
             except:
                 pass
-            await asyncio.sleep(0.1)
+
+            #
+            await asyncio.sleep(1)
 
     async def quiz_clear(self, user_id: int, kick_user: bool = False):
         """quiz_clear"""
@@ -74,8 +82,11 @@ class TelethonBot:
                             "quiz_clear:",
                             exception,
                         )
+                    try:
+                        await self.delete_message(group_id, item["message_id"])
+                    except:
+                        pass
 
-                await self.delete_message(group_id, item["message_id"])
                 await self.delete_message(group_id, item["replay_message_id"])
 
             except Exception as exception:
@@ -96,9 +107,9 @@ class TelethonBot:
         if item:
             try:
                 # check quiz item
-                kick_user = item["quiz_answer"] != event.message.message.strip().lower()
-                # quiz has done
-                await self.quiz_clear(user_id, kick_user=kick_user)
+                item["quiz_is_done"] = (
+                    item["quiz_answer"] == event.message.message.strip().lower()
+                )
 
             except Exception as exception:
                 log.error(
@@ -141,6 +152,7 @@ class TelethonBot:
                 "group_id": group_id,
                 "message_id": message_id,
                 "quiz_answer": QUIZ_ANSWER,
+                "quiz_is_done": False,
             }
 
     async def process_user_left_or_kicked(self, event):
