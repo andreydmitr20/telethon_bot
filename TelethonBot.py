@@ -38,72 +38,72 @@ class TelethonBot:
     ###### main
     async def main_loop(self):
         """main_loop"""
+
+        await self.get_me()
+
         while True:
             # delete who did not pass the quiz
             utc_now = current_utc_date_int()
             for user_id, item in self.__user_joined_or_added_dict.items():
                 if item["end_utc_time"] >= utc_now:
-                    await self.quiz_kick_user(user_id, item)
+                    await self.quiz_clear(user_id, kick_user=True)
 
             await asyncio.sleep(1)
 
-    ###### START
-    async def start(self):
-        """start"""
-        self.__client = await TelegramClient(
-            session=self.__class__.__name__,
-            api_hash=self.__api_hash,
-            api_id=int(self.__api_id),
-        ).start(bot_token=self.__bot_token)
-        async with self.__client as client:
-            me = await client.get_me()
-            self.__bot_username = me.username
-
-            @client.on(events.NewMessage)
-            async def message_handler(event):
-                """message_handler"""
-                await self.process_new_message(event)
-
-            @client.on(events.ChatAction)
-            async def chat_handler(event):
-                """chat_handler"""
-                if event.user_joined or event.user_added:
-                    await self.process_user_joined_or_added(event)
-                elif event.user_left or event.user_kicked:
-                    await self.process_user_left_or_kicked(event)
-                else:
-                    await self.process_chat_action(event)
-
-            await client.run_until_complete(self.main_loop())
-
-    async def quiz_kick_user(self, user_id: int, item):
-        """quiz_kick_user"""
-        try:
+    async def quiz_clear(self, user_id: int, kick_user: bool = False):
+        """quiz_clear"""
+        item = self.__user_joined_or_added_dict.get(user_id, None)
+        if item:
             group_id = item["group_id"]
-            # kick user
 
-            await self.kick_user_from_group(group_id, int(user_id))
-            await self.delete_message(group_id, item["message_id"])
-            await self.delete_message(group_id, item["replay_message_id"])
-        except Exception as exception:
-            log.error(
-                "%s %s exception %s", self.__log_pid, "quiz_kick_user:", exception
-            )
+            try:
+                if kick_user:
+                    try:
+                        await self.kick_user_from_group(group_id, user_id)
+
+                    except Exception as exception:
+                        log.error(
+                            "%s %s exception %s",
+                            self.__log_pid,
+                            "quiz_clear:",
+                            exception,
+                        )
+
+                await self.delete_message(group_id, item["message_id"])
+                await self.delete_message(group_id, item["replay_message_id"])
+
+            except Exception as exception:
+                log.error(
+                    "%s %s exception %s", self.__log_pid, "quiz_clear:", exception
+                )
+            finally:
+                del self.__user_joined_or_added_dict[user_id]
 
     async def process_new_message(self, event):
         """process_new_message"""
         log.info("%s %s", self.__log_pid, event)
+        
+        
         user_id = event.message.from_id.user_id
+        
         # check if quiz answer
         item = self.__user_joined_or_added_dict.get(user_id, None)
         if item:
-            # check quiz item
-            message_id = event.message.id
-            if item["quiz_answer"] == event.message.message.strip().lower():
+            try:
+                # check quiz item
+                kick_user= item["quiz_answer"] != event.message.message.strip().lower():
                 # quiz has done
-                pass
-            else:
-                await self.quiz_kick_user(user_id, item)
+                await self.quiz_clear(user_id,kick_user=kick_user)
+            
+            except Exception as exception:
+                log.error(
+                    "%s %s exception %s",
+                    self.__log_pid,
+                    "process_new_message:",
+                    exception,
+                )
+            finally:
+                event.message.delete()
 
     async def process_chat_action(self, event):
         """process_chat_action"""
@@ -141,16 +141,47 @@ class TelethonBot:
 
     async def delete_message(self, group_id: int, message_id: int):
         """delete_message"""
-        await self.__client.delete_messages(int(group_id), int(message_id))
+        await self.__client.delete_messages(group_id, message_id)
 
     # exception: The API access for bot users is restricted.
     # The method you tried to invoke cannot be executed as a bot (caused by SearchRequest)
     async def delete_user_messages(self, group_id: int, user_id: int):
         """delete_user_messages"""
-        async for message in self.__client.iter_messages(
-            int(group_id), from_user=int(user_id)
-        ):
-            await self.__client.delete_messages(int(group_id), message.id)
+        async for message in self.__client.iter_messages(group_id, from_user=user_id):
+            await self.__client.delete_messages(group_id, message.id)
+
+    async def get_me(self):
+        """get_me"""
+        me = await self.__client.get_me()
+        self.__bot_username = me.username
+
+    ###### START
+    def start(self):
+        """start"""
+        self.__client = TelegramClient(
+            session=self.__class__.__name__,
+            api_hash=self.__api_hash,
+            api_id=int(self.__api_id),
+        ).start(bot_token=self.__bot_token)
+
+        with self.__client as client:
+
+            @client.on(events.NewMessage)
+            async def message_handler(event):
+                """message_handler"""
+                await self.process_new_message(event)
+
+            @client.on(events.ChatAction)
+            async def chat_handler(event):
+                """chat_handler"""
+                if event.user_joined or event.user_added:
+                    await self.process_user_joined_or_added(event)
+                elif event.user_left or event.user_kicked:
+                    await self.process_user_left_or_kicked(event)
+                else:
+                    await self.process_chat_action(event)
+
+            client.loop.run_until_complete(self.main_loop())
 
 
 #############
@@ -162,7 +193,7 @@ if __name__ == "__main__":
     )
     try:
         log.info("%s is starting...", bot.get_log_pid())
-        asyncio.run(bot.start())
+        bot.start()
         log.info("%s disconnected: %s", bot.get_log_pid(), bot.get_bot_username())
 
     except Exception as exception:
