@@ -1,5 +1,6 @@
 import asyncio
-from email import message
+
+# from email import message
 import os
 import time
 import json
@@ -50,12 +51,12 @@ class TelethonBot:
         """send_message_to_pipe"""
         if pipe:
             pipe.send(message_to_send)
-            log.info(
-                "%s %s send message: %s",
-                self.__log_pid,
-                "send_message_to_pipe:",
-                message_to_send,
-            )
+            # log.info(
+            #     "%s %s send message: %s",
+            #     self.__log_pid,
+            #     "send_message_to_pipe:",
+            #     message_to_send,
+            # )
 
     def worker_process(self, child_pipe):
         """worker_process"""
@@ -66,7 +67,7 @@ class TelethonBot:
         log.info(
             "%s %s-%s: has started.",
             self.__log_pid,
-            "worker_process_async: ",
+            "worker_process_async",
             os.getpid(),
         )
         interval_seconds = 1
@@ -228,9 +229,9 @@ if __name__ == "__main__":
         bot_token=config.bot_token,
     )
     try:
-        log.info("%s try to start", bot.get_log_pid())
+        log.info("%s is starting...", bot.get_log_pid())
         asyncio.run(bot.start())
-        log.info("%s disconnected bot: %s", bot.get_log_pid(), bot.get_bot_username())
+        log.info("%s disconnected: %s", bot.get_log_pid(), bot.get_bot_username())
 
     except Exception as exception:
         log.error("%s exception: %s", bot.get_log_pid(), exception)
