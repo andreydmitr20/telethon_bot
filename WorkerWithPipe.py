@@ -27,21 +27,34 @@ class WorkerWithPipe:
             return income_message
         return None
 
+    def get_message_from_child_pipe(self):
+        return self.get_message_from_pipe(self.__worker_child_pipe)
+
+    def get_message_from_parent_pipe(self):
+        return self.get_message_from_pipe(self.__worker_parent_pipe)
+
     def send_message_to_pipe(self, message_to_send, pipe):
         """send_message_to_pipe"""
         if pipe:
             pipe.send(message_to_send)
 
-    def worker_process(self, temp):
+    def send_message_to_child_pipe(self, message_to_send):
+        self.send_message_to_pipe(message_to_send, self.__worker_child_pipe)
+
+    def send_message_to_parent_pipe(self, message_to_send):
+        self.send_message_to_pipe(message_to_send, self.__worker_parent_pipe)
+
+    def worker_process(self):
         """worker_process"""
         asyncio.run(self.__worker_async_function(self))
 
     def __enter__(self):
         """run_worker_process"""
         self.__process = None
-        self.__process = mp.Process(target=self.worker_process, args=(self,))
+        self.__process = mp.Process(target=self.worker_process, args=())
         self.__process.daemon = True  # Set the process as a daemon
         self.__process.start()
+        return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self.__process and self.__process.is_alive():
@@ -56,7 +69,7 @@ if __name__ == "__main__":
         """test_worker"""
         while True:
             time.sleep(1)
-            message = worker.get_message_from_pipe(worker.get_child_pipe())
+            message = worker.get_message_from_child_pipe()
             if message:
                 print(message)
 
@@ -66,5 +79,7 @@ if __name__ == "__main__":
             counter = 0
             while True:
                 time.sleep(2)
-                worker.send_message_to_pipe(str(counter), worker.get_parent_pipe())
+                worker.send_message_to_parent_pipe(str(counter))
                 counter += 1
+
+    asyncio.run(test())
