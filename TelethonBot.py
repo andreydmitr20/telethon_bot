@@ -8,7 +8,11 @@ from telethon import TelegramClient, events
 import multiprocessing as mp
 
 from config import config
-from log import log
+from log import log, current_utc_date_int
+
+SECONDS_TO_ANSWER_QUIZ = 10
+QUIZ_TEXT = "Welcome to the group!\n Answer during {SECONDS_TO_ANSWER_QUIZ} seconds, how much 2+2= ?"
+QUIZ_ANSWER = "4".lower()
 
 
 class TelethonBot:
@@ -21,9 +25,7 @@ class TelethonBot:
         self.__api_hash = api_hash
         self.__bot_username = ""
         self.__client = None
-        self.__answer = None
-        self.__answer_user_id = None
-        self.__worker_parent_pipe, self.__worker_child_pipe = mp.Pipe()
+        self.__user_joined_or_added_dict = {}
 
     def get_log_pid(self) -> str:
         """get_log_pid"""
@@ -33,70 +35,17 @@ class TelethonBot:
         """get_bot_username"""
         return self.__bot_username
 
-    # worker or parallel processing
-    def get_message_from_pipe(self, pipe):
-        """get_message_from_pipe"""
-        if pipe and pipe.poll():
-            income_message = pipe.recv()
-            log.info(
-                "%s %s received message: %s",
-                self.__log_pid,
-                "get_message_from_pipe: ",
-                income_message,
-            )
-            return income_message
-        return None
-
-    def send_message_to_pipe(self, message_to_send, pipe):
-        """send_message_to_pipe"""
-        if pipe:
-            pipe.send(message_to_send)
-            # log.info(
-            #     "%s %s send message: %s",
-            #     self.__log_pid,
-            #     "send_message_to_pipe:",
-            #     message_to_send,
-            # )
-
-    def worker_process(self, child_pipe):
-        """worker_process"""
-        asyncio.run(self.worker_process_async(child_pipe))
-
-    async def worker_process_async(self, child_pipe):
-        """worker_process_async"""
-        log.info(
-            "%s %s-%s: has started.",
-            self.__log_pid,
-            "worker_process_async",
-            os.getpid(),
-        )
-        interval_seconds = 1
+    ###### main
+    async def main_loop(self):
+        """main_loop"""
         while True:
-            time.sleep(interval_seconds)
-            try:
-                message = self.get_message_from_pipe(child_pipe)
-            except Exception as exc:
-                log.error(
-                    "%s %s-%s: stopped. Exception: %s",
-                    self.__log_pid,
-                    "worker_process_async: ",
-                    os.getpid(),
-                    exc,
-                )
+            # delete who did not pass the quiz
+            utc_now = current_utc_date_int()
+            for user_id, item in self.__user_joined_or_added_dict.items():
+                if item["end_utc_time"] >= utc_now:
+                    await self.quiz_kick_user(user_id, item)
 
-    def run_worker_process(self, child_pipe):
-        """run_worker_process"""
-        process = None
-        try:
-            process = mp.Process(target=self.worker_process, args=(child_pipe,))
-            process.daemon = True  # Set the process as a daemon
-            process.start()
-            return process
-        except Exception as exc:
-            log.info("%s %s exception %s", self.__log_pid, "run_worker_process:", exc)
-            if process and process.is_alive():
-                process.terminate()
-            return None
+            await asyncio.sleep(1)
 
     ###### START
     async def start(self):
@@ -125,37 +74,36 @@ class TelethonBot:
                 else:
                     await self.process_chat_action(event)
 
-            worker_process = None
+            await client.run_until_complete(self.main_loop())
 
-            try:
-                # run rabbit income message listener
-                worker_process = self.run_worker_process(self.__worker_child_pipe)
-                # loop
-                await client.run_until_disconnected()
-            finally:
-                if worker_process and worker_process.is_alive():
-                    worker_process.terminate()
+    async def quiz_kick_user(self, user_id: int, item):
+        """quiz_kick_user"""
+        try:
+            group_id = item["group_id"]
+            # kick user
+
+            await self.kick_user_from_group(group_id, int(user_id))
+            await self.delete_message(group_id, item["message_id"])
+            await self.delete_message(group_id, item["replay_message_id"])
+        except Exception as exception:
+            log.error(
+                "%s %s exception %s", self.__log_pid, "quiz_kick_user:", exception
+            )
 
     async def process_new_message(self, event):
         """process_new_message"""
         log.info("%s %s", self.__log_pid, event)
-
-        self.send_message_to_pipe(
-            json.dumps(
-                {
-                    "user_id": event.message.from_id.user_id,
-                    "message": event.message.message,
-                    "type": "in_msg",
-                }
-            ),
-            self.__worker_parent_pipe,
-        )
-        # if self.__answer_user_id == event.message.from_id.user_id:
-        #     self.__answer = event.message.message
-        #     await self.delete_message(
-        #         event.message.peer_id.channel_id, event.message.id
-        #     )
-        #     return
+        user_id = event.message.from_id.user_id
+        # check if quiz answer
+        item = self.__user_joined_or_added_dict.get(user_id, None)
+        if item:
+            # check quiz item
+            message_id = event.message.id
+            if item["quiz_answer"] == event.message.message.strip().lower():
+                # quiz has done
+                pass
+            else:
+                await self.quiz_kick_user(user_id, item)
 
     async def process_chat_action(self, event):
         """process_chat_action"""
@@ -165,38 +113,22 @@ class TelethonBot:
         """process_user_joined_or_added"""
         log.info("%s %s", self.__log_pid, event)
         if event.action_message:
-            self.send_message_to_pipe(json.dumps({}), self.__worker_parent_pipe)
-
-            # reply_msg = None
-            # try:
-            #     seconds = 10
-            #     self.__answer = None
-            #     self.__answer_user_id = event.action_message.from_id.user_id
-            #     group_id = event.action_message.peer_id.channel_id
-            #     message_id = event.action_message.id
-            #     reply_msg = await event.reply(
-            #         f"Welcome to the group!\n Answer during {seconds} seconds, how much 2+2= ?"
-            #     )
-            #     while self.__answer is None and seconds > 0:
-            #         asyncio.sleep(1000)
-            #         seconds -= 1
-            #         log.info("%s %s", self.__log_pid, seconds)
-
-            #     if not self.__answer:
-            #         user_id = self.__answer_user_id
-            #         try:
-            #             # delete message
-            #             # await self.delete_message(group_id, message_id)
-            #             # delete user
-            #             await self.kick_user_from_group(group_id, user_id)
-            #             await event.action_message.delete()
-            #         except Exception as exception:
-            #             log.error("%s exception: %s", self.__log_pid, exception)
-            # finally:
-            #     self.__answer_user_id = None
-            #     self.__answer = None
-            #     if reply_msg:
-            #         await reply_msg.delete()
+            user_id = event.action_message.from_id.user_id
+            group_id = event.action_message.peer_id.channel_id
+            message_id = event.action_message.id
+            #
+            reply_msg = await event.reply(
+                QUIZ_TEXT.replace(
+                    "{SECONDS_TO_ANSWER_QUIZ}", str(SECONDS_TO_ANSWER_QUIZ)
+                )
+            )
+            self.__user_joined_or_added_dict[user_id] = {
+                "end_utc_time": current_utc_date_int() + SECONDS_TO_ANSWER_QUIZ,
+                "replay_message_id": reply_msg.id,
+                "group_id": group_id,
+                "message_id": message_id,
+                "quiz_answer": QUIZ_ANSWER,
+            }
 
     async def process_user_left_or_kicked(self, event):
         """process_user_left_or_kicked"""
