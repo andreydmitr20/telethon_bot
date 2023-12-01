@@ -14,3 +14,4 @@ tempCodeRunnerFile.py
 /dist
 /my_python
 *.session
+*.session-journal

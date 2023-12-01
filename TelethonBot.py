@@ -116,7 +116,11 @@ class TelethonBot:
         log.info("%s %s", self.__log_pid, event)
         if event.action_message:
             user_id = event.action_message.from_id.user_id
-            group_id = event.action_message.peer_id.channel_id
+
+            group_id = event.action_message.peer_id.get("channel_id", None)
+            if group_id is None:
+                group_id = event.action_message.peer_id.get("chat_id", None)
+
             message_id = event.action_message.id
             #
             reply_msg = await event.reply(
