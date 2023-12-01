@@ -41,7 +41,8 @@ class WorkerWithPipe:
         print()
         print(message_to_send)
         if pipe:
-            await pipe.send(message_to_send)
+            # await pipe.send(message_to_send)
+            pipe.send(message_to_send)
 
     async def send_message_to_child_pipe(self, message_to_send):
         await self.send_message_to_pipe(message_to_send, self.__worker_child_pipe)
@@ -70,13 +71,24 @@ class WorkerWithPipe:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if self.__process and self.__process.is_alive():
-            self.__process.terminate()
-            self.__process = None
-        if self.__worker_child_pipe:
-            self.__worker_child_pipe.close()
-        if self.__worker_parent_pipe:
-            self.__worker_parent_pipe.close()
+        try:
+            if self.__process and self.__process.is_alive():
+                self.__process.terminate()
+                self.__process = None
+        except:
+            pass
+        try:
+            if self.__worker_child_pipe:
+                self.__worker_child_pipe.close()
+                self.__worker_child_pipe = None
+        except:
+            pass
+        try:
+            if self.__worker_parent_pipe:
+                self.__worker_parent_pipe.close()
+                self.__worker_parent_pipe = None
+        except:
+            pass
 
 
 ########
@@ -89,7 +101,6 @@ if __name__ == "__main__":
             """get_message_from_pipe"""
             if child_pipe and child_pipe.poll():
                 income_message = child_pipe.recv()
-                # income_message = await child_pipe.recv()
                 return income_message
             return None
 
@@ -98,6 +109,8 @@ if __name__ == "__main__":
             message = await get_message_from_pipe()
             if message:
                 print(message)
+                if message == str(5):
+                    break
 
     async def test():
         """test"""
@@ -105,6 +118,7 @@ if __name__ == "__main__":
             counter = 0
             while True:
                 time.sleep(2)
+                print(f">>{counter}")
                 worker.get_parent_pipe().send(str(counter))
                 # await worker.send_message_to_parent_pipe(str(counter))
                 counter += 1
