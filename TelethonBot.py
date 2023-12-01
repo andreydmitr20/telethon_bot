@@ -4,7 +4,10 @@ import asyncio
 import os
 import time
 import json
-from telethon import TelegramClient, events
+from telethon import TelegramClient, events, utils
+from telethon.tl import types
+from telethon.tl.types import PeerChannel, PeerChat
+
 import multiprocessing as mp
 
 from config import config
@@ -117,9 +120,13 @@ class TelethonBot:
         if event.action_message:
             user_id = event.action_message.from_id.user_id
 
-            group_id = event.action_message.peer_id.get("channel_id", None)
-            if group_id is None:
-                group_id = event.action_message.peer_id.get("chat_id", None)
+            peer_id = event.action_message.peer_id
+            # print(peer_id)
+            group_id = None
+            if isinstance(peer_id, PeerChannel):
+                group_id = peer_id.channel_id
+            elif isinstance(peer_id, PeerChat):
+                group_id = peer_id.chat_id
 
             message_id = event.action_message.id
             #
@@ -140,7 +147,10 @@ class TelethonBot:
         """process_user_left_or_kicked"""
         log.info("%s %s", self.__log_pid, event)
         if event.action_message:
-            await event.action_message.delete()
+            try:
+                await event.action_message.delete()
+            except:
+                pass
 
     async def kick_user_from_group(self, group_id: int, user_id: int):
         """kick_user_from_group"""
